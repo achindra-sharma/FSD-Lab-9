@@ -1,69 +1,51 @@
-// Import necessary packages
 const express = require('express');
-const mysql = require('mysql2');
+const { Pool } = require('pg'); 
 const multer = require('multer');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-// Initialize Express app
 const app = express();
 const port = 3001;
 
-// --- Middleware ---
-app.use(cors()); // Enable Cross-Origin Resource Sharing
-app.use(express.json()); // Parse JSON request bodies
-// Serve static files from the 'uploads' directory
+app.use(cors());
+app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// --- MySQL Database Connection ---
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-}).promise();
+const db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+});
 
-// --- Multer Configuration for File Uploads ---
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Store uploaded files in the 'uploads' folder
+        cb(null, 'uploads/');
     },
     filename: (req, file, cb) => {
-        // Create a unique filename to avoid overwriting
         cb(null, `${Date.now()}-${file.originalname}`);
     }
 });
 const upload = multer({ storage: storage });
 
-// --- Nodemailer Configuration for Sending Emails ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Or any other email service
+    service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, // Use the App Password
+        pass: process.env.EMAIL_PASS,
     },
 });
 
-// --- REST API Endpoints ---
 
-// 1. CREATE: Register a new user
 app.post('/api/users', upload.single('profilePicture'), async (req, res) => {
     try {
         const { name, email, phone } = req.body;
-        // The path to the uploaded file is available in req.file.path
         const profilePicturePath = req.file ? req.file.path : null;
 
-        const [result] = await db.query(
-            'INSERT INTO users (name, email, phone, profile_picture) VALUES (?, ?, ?, ?)',
+        const result = await db.query(
+            'INSERT INTO users (name, email, phone, profile_picture) VALUES ($1, $2, $3, $4) RETURNING id',
             [name, email, phone, profilePicturePath]
         );
 
-        // Send confirmation email
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: email,
@@ -74,13 +56,12 @@ app.post('/api/users', upload.single('profilePicture'), async (req, res) => {
         transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
                 console.error('Error sending email:', error);
-                // We don't fail the whole request if email fails, just log it.
             } else {
                 console.log('Email sent: ' + info.response);
             }
         });
 
-        res.status(201).json({ id: result.insertId, message: 'User registered successfully!' });
+        res.status(201).json({ id: result.rows[0].id, message: 'User registered successfully!' });
 
     } catch (error) {
         console.error(error);
@@ -88,10 +69,9 @@ app.post('/api/users', upload.single('profilePicture'), async (req, res) => {
     }
 });
 
-// 2. READ: Get all registered users
 app.get('/api/users', async (req, res) => {
     try {
-        const [users] = await db.query('SELECT * FROM users ORDER BY created_at DESC');
+        const { rows: users } = await db.query('SELECT * FROM users ORDER BY created_at DESC');
         res.status(200).json(users);
     } catch (error) {
         console.error(error);
@@ -99,14 +79,13 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
-// 3. UPDATE: Update a user's details (Example: updating name and phone)
 app.put('/api/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, phone } = req.body;
 
         await db.query(
-            'UPDATE users SET name = ?, phone = ? WHERE id = ?',
+            'UPDATE users SET name = $1, phone = $2 WHERE id = $3',
             [name, phone, id]
         );
 
@@ -122,13 +101,12 @@ app.put('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        // Optional: Also delete the profile picture file from the server
-        // const [user] = await db.query('SELECT profile_picture FROM users WHERE id = ?', [id]);
-        // if (user.length > 0 && user[0].profile_picture) {
-        //     fs.unlinkSync(user[0].profile_picture);
-        // }
-        
-        await db.query('DELETE FROM users WHERE id = ?', [id]);
+        const { rows: user } = await db.query('SELECT profile_picture FROM users WHERE id = $1', [id]);
+        if (user.length > 0 && user[0].profile_picture) {
+            fs.unlinkSync(user[0].profile_picture);
+        }
+
+        await db.query('DELETE FROM users WHERE id = $1', [id]);
         res.status(200).json({ message: 'User deleted successfully!' });
 
     } catch (error) {
@@ -138,7 +116,6 @@ app.delete('/api/users/:id', async (req, res) => {
 });
 
 
-// --- Start the server ---
 app.listen(port, () => {
     console.log(`Backend server running at http://localhost:${port}`);
 });
