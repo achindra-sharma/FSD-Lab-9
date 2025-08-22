@@ -97,7 +97,6 @@ app.put('/api/users/:id', async (req, res) => {
     }
 });
 
-// 4. DELETE: Delete a user
 app.delete('/api/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
