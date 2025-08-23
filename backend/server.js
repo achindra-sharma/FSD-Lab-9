@@ -1,5 +1,5 @@
 const express = require('express');
-const { Pool } = require('pg'); 
+const mysql = require('mysql2');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
@@ -9,17 +9,23 @@ require('dotenv').config();
 const app = express();
 const port = 3001;
 
-app.use(cors());
-app.use(express.json());
+app.use(cors()); 
+app.use(express.json()); 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const db = new Pool({
-    connectionString: process.env.DATABASE_URL,
-});
+const db = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+}).promise();
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        cb(null, 'uploads/'); 
     },
     filename: (req, file, cb) => {
         cb(null, `${Date.now()}-${file.originalname}`);
@@ -28,21 +34,20 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: 'gmail', 
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        pass: process.env.EMAIL_PASS, 
     },
 });
-
 
 app.post('/api/users', upload.single('profilePicture'), async (req, res) => {
     try {
         const { name, email, phone } = req.body;
         const profilePicturePath = req.file ? req.file.path : null;
 
-        const result = await db.query(
-            'INSERT INTO users (name, email, phone, profile_picture) VALUES ($1, $2, $3, $4) RETURNING id',
+        const [result] = await db.query(
+            'INSERT INTO users (name, email, phone, profile_picture) VALUES (?, ?, ?, ?)',
             [name, email, phone, profilePicturePath]
         );
 
@@ -61,7 +66,7 @@ app.post('/api/users', upload.single('profilePicture'), async (req, res) => {
             }
         });
 
-        res.status(201).json({ id: result.rows[0].id, message: 'User registered successfully!' });
+        res.status(201).json({ id: result.insertId, message: 'User registered successfully!' });
 
     } catch (error) {
         console.error(error);
@@ -71,7 +76,7 @@ app.post('/api/users', upload.single('profilePicture'), async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
     try {
-        const { rows: users } = await db.query('SELECT * FROM users ORDER BY created_at DESC');
+        const [users] = await db.query('SELECT * FROM users ORDER BY created_at DESC');
         res.status(200).json(users);
     } catch (error) {
         console.error(error);
@@ -85,7 +90,7 @@ app.put('/api/users/:id', async (req, res) => {
         const { name, phone } = req.body;
 
         await db.query(
-            'UPDATE users SET name = $1, phone = $2 WHERE id = $3',
+            'UPDATE users SET name = ?, phone = ? WHERE id = ?',
             [name, phone, id]
         );
 
@@ -100,12 +105,12 @@ app.put('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { rows: user } = await db.query('SELECT profile_picture FROM users WHERE id = $1', [id]);
+        const [user] = await db.query('SELECT profile_picture FROM users WHERE id = ?', [id]);
         if (user.length > 0 && user[0].profile_picture) {
-            fs.unlinkSync(user[0].profile_picture);
-        }
-
-        await db.query('DELETE FROM users WHERE id = $1', [id]);
+             fs.unlinkSync(user[0].profile_picture);
+            }
+        
+        await db.query('DELETE FROM users WHERE id = ?', [id]);
         res.status(200).json({ message: 'User deleted successfully!' });
 
     } catch (error) {
@@ -113,7 +118,6 @@ app.delete('/api/users/:id', async (req, res) => {
         res.status(500).json({ error: 'Database error' });
     }
 });
-
 
 app.listen(port, () => {
     console.log(`Backend server running at http://localhost:${port}`);
