@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Mail, Phone, Trash2, BookOpen, GraduationCap, Search, Filter } from 'lucide-react';
 import axios from 'axios';
 
+
 const UserList = () => {
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,6 +24,7 @@ const UserList = () => {
     }
   };
 
+  // Fetch users when the component mounts
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -30,6 +32,7 @@ const UserList = () => {
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesFilter = filterStatus === 'all' || (user.status && user.status === filterStatus);
     return matchesSearch && matchesFilter;
   });
@@ -37,8 +40,7 @@ const UserList = () => {
   const handleDelete = async (userId) => {
     if (window.confirm('Are you sure you want to remove this student?')) {
       try {
-        await axios.delete(`/api/users/${userId}`);
-
+        await axios.delete(`http://localhost:3001/api/users/${userId}`);
         setUsers(users.filter(user => user.id !== userId));
       } catch (err) {
         alert('Failed to delete student.');
@@ -140,7 +142,8 @@ const UserList = () => {
                   <div className="flex items-center gap-5 flex-1">
                     <div className="relative flex-shrink-0">
                       <img
-                        src={`/${user.profile_picture.replace(/\\/g, '/')}`}
+                        // Construct the full URL for the image
+                        src={`http://localhost:3001/${user.profile_picture.replace(/\\/g, '/')}`}
                         alt={user.name}
                         className="w-18 h-18 rounded-2xl object-cover ring-2 ring-slate-100"
                         onError={(e) => {
@@ -171,6 +174,7 @@ const UserList = () => {
                         )}
                       </div>
                       
+                      {/* Show courses if available in your data */}
                       {user.courses && user.courses.length > 0 ? (
                         <div className="flex items-center gap-3 flex-wrap">
                           <BookOpen className="w-4 h-4 text-slate-600" />
@@ -188,7 +192,7 @@ const UserList = () => {
                         </div>
                       )}
                       
-
+                      {/* Show join date if available */}
                       {user.created_at && (
                         <div className="mt-3 text-sm text-slate-600">
                           <span className="font-medium">Joined:</span> {formatDate(user.created_at)}

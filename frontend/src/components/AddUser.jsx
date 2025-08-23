@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import axios from 'axios';
 
+
 const AddUser = ({ onUserAdded }) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -54,6 +55,7 @@ const AddUser = ({ onUserAdded }) => {
 
     setIsLoading(true);
     
+    // Use FormData to send both text and file data
     const apiFormData = new FormData();
     apiFormData.append('name', formData.name);
     apiFormData.append('email', formData.email);
@@ -61,7 +63,7 @@ const AddUser = ({ onUserAdded }) => {
     apiFormData.append('profilePicture', formData.profilePicture);
 
     try {
-      const response = await axios.post('/api/users', apiFormData, {
+      const response = await axios.post('http://localhost:3001/api/users', apiFormData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
